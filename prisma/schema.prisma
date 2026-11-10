@@ -1,0 +1,1379 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model School {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  schoolId    String?          // null = global role; else school-scoped
+  name        String
+  description String?
+  permissionsJson String        // JSON array of catalog permission strings (SQLite has no primitive lists)
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+model User {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id])
+  name      String
+  email     String   @unique
+  password  String
+  role      String // FACULTY, FINANCE_OFFICER, EXAM_CONTROLLER, DEAN, STUDENT, REGISTRAR_ADMIN, SUPER_ADMIN
+  position  String? // fine-grained sub-role: SUBJECT_TEACHER, CLASS_COORDINATOR, HOD, EXAM_CELL_CLERK, HOSTEL_ADMIN, ADMISSIONS_OFFICER, PROGRAM_COORDINATOR, DEPARTMENT_SECRETARY
+  active    Boolean  @default(true)
+  customRoleId String?
+  customRole     Role?  @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
+  departmentId String?
+  department     Department? @relation("DepartmentMembers", fields: [departmentId], references: [id])
+  headedDepartments Department[] @relation("DepartmentHead")
+  coordinatedPrograms  Program[] @relation("ProgramCoordinator")
+  coordinatedClasses    ClassGroup[] @relation("ClassGroupCoordinator")
+  facultyAllocations    FacultyAllocation[]
+  timetableSlots        TimetableSlot[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+}
+
+model AdmissionCycle {
+  id           String        @id @default(cuid())
+  schoolId     String
+  title        String
+  academicYear String
+  startDate    DateTime
+  endDate      DateTime
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  applications Application[]
+
+  @@index([schoolId])
+}
+
+model Program {
+  id             String   @id @default(cuid())
+  schoolId       String
+  name           String
+  code           String
+  durationYears  Float
+  totalSemesters Int
+  degreeType     String
+  currentIntake  Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  batches  Batch[]
+  students Student[]
+  classGroups ClassGroup[]
+  events    AcademicEvent[]
+  coordinatorUserId String?
+  coordinator User? @relation("ProgramCoordinator", fields: [coordinatorUserId], references: [id])
+
+  @@index([schoolId])
+  @@index([schoolId, code])
+}
+
+model MeritList {
+  id          String    @id @default(cuid())
+  schoolId    String
+  cycleId     String
+  programId   String
+  totalRanked Int
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([cycleId, programId])
+  @@index([schoolId])
+}
+
+model Application {
+  id                String         @id @default(cuid())
+  schoolId          String
+  cycleId           String
+  cycle             AdmissionCycle @relation(fields: [cycleId], references: [id])
+  applicationNo     String         @unique
+  programId         String
+  applicantName     String
+  email             String
+  phone             String
+  gender            String
+  dob               DateTime
+  category          String // GENERAL, OBC, SC, ST, EWS
+  marksPercentage   Float
+  documentsJson     String // JSON string for uploaded docs
+  status            String // SUBMITTED, VERIFIED, REJECTED, SHORTLISTED, ADMITTED
+  meritRank         Int?
+  remarks           String?
+  seatAllocated     Boolean        @default(false)
+  provisionalRollNo String?
+  quotaCategory     String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([schoolId, cycleId])
+  @@index([schoolId, programId])
+  @@index([status])
+}
+
+model Batch {
+  id           String    @id @default(cuid())
+  schoolId     String
+  name         String
+  academicYear String
+  programId    String
+  program      Program   @relation(fields: [programId], references: [id])
+  createdAt    DateTime  @default(now())
+  students     Student[]
+  classGroups  ClassGroup[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+model Student {
+  id             String    @id @default(cuid())
+  schoolId       String
+  rollNo         String
+  admissionId    String?
+  programId      String
+  batchId        String
+  firstName      String
+  lastName       String
+  email          String
+  phone          String
+  dob            String
+  gender         String
+  category       String
+  status         String    @default("ACTIVE")
+  admissionDate  DateTime  @default(now())
+  graduationDate DateTime?
+  degreeAwarded  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  program          Program           @relation(fields: [programId], references: [id])
+  batch            Batch             @relation(fields: [batchId], references: [id])
+  enrollments      Enrollment[]
+  leaveRequests    LeaveRequest[]
+  transferRequests TransferRequest[]
+
+  @@unique([schoolId, rollNo])
+  @@unique([schoolId, email])
+  @@index([schoolId])
+}
+
+model Enrollment {
+  id           String   @id @default(cuid())
+  schoolId     String
+  studentId    String
+  student      Student  @relation(fields: [studentId], references: [id])
+  academicYear String
+  semester     Int
+  status       String   @default("ENROLLED")
+  createdAt    DateTime @default(now())
+
+  @@unique([schoolId, studentId, academicYear, semester])
+  @@index([schoolId])
+}
+
+model AttendanceRecord {
+  id        String   @id @default(cuid())
+  schoolId  String
+  courseId  String
+  studentId String
+  date      DateTime
+  status    String // PRESENT | ABSENT
+  markedById String? // user who last marked/updated this record (FACULTY)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, courseId, studentId, date])
+  @@index([schoolId, courseId])
+  @@index([schoolId, studentId])
+  @@index([schoolId, courseId, date])
+}
+
+model LeaveRequest {
+  id          String   @id @default(cuid())
+  schoolId    String
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id])
+  type        String
+  fromDate    String
+  toDate      String
+  reason      String
+  status      String   @default("PENDING")
+  remarks     String?
+  requestedAt DateTime @default(now())
+
+  @@index([schoolId])
+}
+
+model TransferRequest {
+  id            String   @id @default(cuid())
+  schoolId      String
+  studentId     String
+  student       Student  @relation(fields: [studentId], references: [id])
+  fromProgramId String
+  toProgramId   String
+  reason        String
+  status        String   @default("PENDING")
+  remarks       String?
+  requestedAt   DateTime @default(now())
+
+  @@index([schoolId])
+}
+
+model FeeStructure {
+  id             String   @id @default(cuid())
+  schoolId       String
+  programId      String
+  academicYear   String
+  semester       Int
+  componentsJson String
+  totalAmount    Float
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([schoolId, programId])
+}
+
+model Invoice {
+  id          String   @id @default(cuid())
+  schoolId    String
+  studentId   String
+  structureId String
+  invoiceNo   String   @unique
+  amount      Float
+  dueDate     DateTime
+  status      String   @default("UNPAID")
+  paidAmount  Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, status])
+  @@index([schoolId, structureId])
+}
+
+model Payment {
+  id             String   @id @default(cuid())
+  schoolId       String
+  invoiceId      String
+  amount         Float
+  mode           String
+  transactionRef String?
+  receiptNo      String   @unique
+  idempotencyKey String?  @unique
+  createdAt      DateTime @default(now())
+
+  @@index([schoolId, invoiceId])
+}
+
+// ==============================================================================
+// Examination & Result module (Module 4) — see docs/specs/examination-result.md
+// ==============================================================================
+
+model Course {
+  id        String @id @default(cuid())
+  schoolId  String
+  programId String
+  code      String
+  title     String
+  credits   Float
+  semester  Int?            // offered semester (registration catalog)
+  type      String @default("CORE") // CORE | ELECTIVE
+  seatsTotal Int @default(60) // elective seat cap
+  instructorName String?    // optional instructor display name
+
+  allocations FacultyAllocation[]
+  timetableSlots TimetableSlot[]
+
+  @@index([schoolId, programId])
+}
+
+model Exam {
+  id           String    @id @default(cuid())
+  schoolId     String
+  programId    String
+  academicYear String
+  semester     Int
+  type         String // MID_SEM | END_SEM
+  title        String
+  maxInternal  Float
+  maxExternal  Float
+  status       String    @default("DRAFT") // DRAFT | SCHEDULED | COMPLETED | PUBLISHED
+  publishedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([schoolId, programId])
+  @@index([schoolId, status])
+}
+
+model ExamSchedule {
+  id        String   @id @default(cuid())
+  schoolId  String
+  examId    String
+  courseId  String
+  examDate  DateTime
+  startTime String
+  venue     String
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, examId, courseId])
+  @@index([schoolId, examId])
+}
+
+model HallTicket {
+  id           String   @id @default(cuid())
+  schoolId     String
+  examId       String
+  studentId    String
+  hallTicketNo String   @unique
+  createdAt    DateTime @default(now())
+
+  @@unique([schoolId, examId, studentId])
+  @@index([schoolId, studentId])
+}
+
+model MarksEntry {
+  id            String   @id @default(cuid())
+  schoolId      String
+  examId        String
+  scheduleId    String
+  studentId     String
+  internalMarks Float
+  externalMarks Float
+  totalMarks    Float
+  grade         String?
+  enteredBy     String // user id
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([schoolId, examId, scheduleId, studentId])
+  @@index([schoolId, examId])
+}
+
+model ProgramOutcome {
+  id          String   @id @default(cuid())
+  schoolId    String
+  programId   String
+  code        String
+  description String
+  createdAt   DateTime @default(now())
+
+  @@unique([schoolId, programId, code])
+  @@index([schoolId, programId])
+}
+
+model CourseOutcome {
+  id          String   @id @default(cuid())
+  schoolId    String
+  courseId    String
+  code        String
+  description String
+  createdAt   DateTime @default(now())
+
+  @@unique([schoolId, courseId, code])
+  @@index([schoolId, courseId])
+}
+
+model COPOMapping {
+  id       String @id @default(cuid())
+  schoolId String
+  courseId String
+  coId     String
+  poId     String
+  weight   Float
+
+  @@unique([schoolId, courseId, coId, poId])
+  @@index([schoolId, courseId])
+}
+
+model COAttainment {
+  id           String   @id @default(cuid())
+  schoolId     String
+  courseId     String
+  coId         String
+  academicYear String
+  attainment   Float
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([schoolId, courseId, coId, academicYear])
+  @@index([schoolId, courseId])
+}
+
+model HostelRoom {
+  id       String   @id @default(cuid())
+  schoolId String
+  roomNo   String
+  type     String
+  capacity Int
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, roomNo])
+  @@index([schoolId])
+}
+
+model HostelAllocation {
+  id          String   @id @default(cuid())
+  schoolId    String
+  studentId   String
+  roomId      String
+  allocatedAt DateTime @default(now())
+  vacatedAt   DateTime?
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, roomId])
+}
+
+model MessBill {
+  id        String  @id @default(cuid())
+  schoolId  String
+  studentId String
+  month     String // YYYY-MM
+  amount    Float
+  paid      Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, studentId, month])
+  @@index([schoolId, studentId])
+}
+
+model HostelComplaint {
+  id          String  @id @default(cuid())
+  schoolId    String
+  studentId   String
+  type        String
+  description String
+  status      String @default("OPEN") // OPEN | IN_PROGRESS | RESOLVED
+  createdAt   DateTime @default(now())
+
+  @@index([schoolId, studentId])
+}
+
+// ==============================================================================
+// HR & Payroll module (Module 9) — see docs/specs/hr-payroll.md
+// ==============================================================================
+
+model Employee {
+  id          String   @id @default(cuid())
+  schoolId    String
+  employeeId  String
+  userId      String?
+  name        String
+  designation String
+  department  String
+  createdAt   DateTime @default(now())
+
+  @@unique([schoolId, employeeId])
+  @@index([schoolId, userId])
+}
+
+model EmployeeLeave {
+  id         String   @id @default(cuid())
+  schoolId   String
+  employeeId String
+  fromDate   DateTime
+  toDate     DateTime
+  type       String
+  status     String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  createdAt  DateTime @default(now())
+
+  @@index([schoolId, employeeId])
+}
+
+model Payroll {
+  id         String  @id @default(cuid())
+  schoolId   String
+  employeeId String
+  month      String // YYYY-MM
+  gross      Float
+  deductions Float
+  net        Float
+  status     String  @default("GENERATED") // GENERATED | APPROVED
+  createdAt  DateTime @default(now())
+
+  @@unique([schoolId, employeeId, month])
+  @@index([schoolId, month])
+}
+
+// ==============================================================================
+// Alumni Management module (Module 10 — final).
+// Schema per docs/specs/alumni.md §5. Records are tenant-scoped by schoolId.
+// ==============================================================================
+
+model Alumni {
+  id            String   @id @default(cuid())
+  schoolId      String
+  studentId     String   @unique
+  email         String
+  phone         String?
+  currentCompany String?
+  batch         String?
+  createdAt      DateTime @default(now())
+
+  @@index([schoolId])
+}
+
+model AlumniEvent {
+  id        String   @id @default(cuid())
+  schoolId  String
+  title     String
+  date      DateTime
+  location  String?
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+}
+
+model AlumniRegistration {
+  id       String @id @default(cuid())
+  schoolId String
+  alumniId String
+  eventId  String
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, alumniId, eventId])
+  @@index([schoolId, eventId])
+  @@index([schoolId, alumniId])
+}
+
+model AlumniDonation {
+  id        String   @id @default(cuid())
+  schoolId  String
+  alumniId  String
+  amount    Float
+  mode      String
+  createdAt DateTime @default(now())
+
+  @@index([schoolId, alumniId])
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  code      String
+  headUserId String?
+  head      User?   @relation("DepartmentHead", fields: [headUserId], references: [id], onDelete: SetNull)
+  members   User[]  @relation("DepartmentMembers")
+  allocations FacultyAllocation[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, code])
+  @@index([schoolId])
+}
+
+model ClassGroup {
+  id             String  @id @default(cuid())
+  schoolId       String
+  programId      String
+  batchId        String
+  section        String
+  coordinatorUserId String?
+  program        Program @relation(fields: [programId], references: [id])
+  batch          Batch   @relation(fields: [batchId], references: [id])
+  coordinator    User?  @relation("ClassGroupCoordinator", fields: [coordinatorUserId], references: [id], onDelete: SetNull)
+  allocations    FacultyAllocation[]
+  timetableSlots TimetableSlot[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([programId, batchId, section])
+  @@index([schoolId])
+}
+
+model FacultyAllocation {
+  id           String  @id @default(cuid())
+  schoolId     String
+  departmentId String?
+  courseId     String
+  classGroupId String
+  facultyUserId String
+  semester     Int
+  academicYear String
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  course       Course    @relation(fields: [courseId], references: [id])
+  classGroup   ClassGroup @relation(fields: [classGroupId], references: [id])
+  faculty      User      @relation(fields: [facultyUserId], references: [id])
+  createdAt    DateTime  @default(now())
+
+  @@unique([courseId, classGroupId, semester, academicYear])
+  @@index([schoolId])
+  @@index([departmentId])
+}
+
+// ==============================================================================
+// Academic Calendar & Timetable — deep core.
+// ==============================================================================
+
+model AcademicEvent {
+  id        String   @id @default(cuid())
+  schoolId  String
+  programId String?
+  program   Program? @relation(fields: [programId], references: [id], onDelete: SetNull)
+  title     String
+  type      String // HOLIDAY | EXAM | EVENT | DEADLINE
+  startDate DateTime
+  endDate   DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId, startDate])
+  @@index([programId])
+}
+
+model TimetableSlot {
+  id           String   @id @default(cuid())
+  schoolId     String
+  classGroupId String
+  classGroup   ClassGroup @relation(fields: [classGroupId], references: [id])
+  dayOfWeek    Int // 1=Monday .. 6=Saturday
+  startTime    String // "HH:mm" (24h)
+  endTime      String // "HH:mm" (24h)
+  courseId     String
+  course       Course    @relation(fields: [courseId], references: [id])
+  facultyUserId String
+  faculty      User      @relation(fields: [facultyUserId], references: [id])
+  room         String?
+  semester     Int
+  academicYear String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([schoolId, classGroupId])
+  @@index([schoolId, facultyUserId])
+  @@index([schoolId, room])
+}
+
+// ==============================================================================
+// Cross-cutting infrastructure (Module: Batch 4) — audit log & notifications.
+// Spec: docs/specs/cross-cutting-infra.md. Records are tenant-scoped by schoolId.
+// ==============================================================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  schoolId  String
+  actorId   String
+  action    String // e.g. STUDENT_CREATED, PAYMENT_RECORDED, EXAM_PUBLISHED
+  entityType String
+  entityId  String
+  summary   String
+  metadata  String? // optional JSON string
+  createdAt DateTime @default(now())
+
+  @@index([schoolId, createdAt])
+  @@index([schoolId, entityType, entityId])
+  @@index([schoolId, actorId])
+}
+
+model Notification {
+  id             String   @id @default(cuid())
+  schoolId       String
+  recipientUserId String
+  type           String
+  title          String
+  body           String?
+  link           String?
+  read           Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([schoolId, recipientUserId, read])
+  @@index([schoolId, recipientUserId, createdAt])
+}
+
+// ==============================================================================
+// Dean Oversight — daily faculty presence. Spec docs/specs/dean-overview.md.
+// ==============================================================================
+
+model FacultyPresence {
+  id       String   @id @default(cuid())
+  schoolId String
+  userId    String
+  date     DateTime // date at local midnight
+  status   String // PRESENT | ABSENT | ON_LEAVE
+  markedBy String // user id who set it
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, userId, date])
+  @@index([schoolId, date])
+  @@index([schoolId, userId])
+}
+
+// ==============================================================================
+// Batch A: core campus services (Library, Transport, Certificates, Notices).
+// Specs: docs/specs/library.md, transport.md, certificates.md, notices.md.
+// Every table carries schoolId (multi-tenant scoping).
+// ==============================================================================
+
+model LibraryBook {
+  id           String @id @default(cuid())
+  schoolId     String
+  title        String
+  author       String
+  isbn         String?
+  category     String?
+  shelf        String?
+  totalCopies  Int @default(1)
+  copies       LibraryCopy[]
+
+  @@index([schoolId])
+}
+
+model LibraryCopy {
+  id         String @id @default(cuid())
+  schoolId   String
+  bookId     String
+  accessionNo String @unique
+  available  Boolean @default(true)
+  book       LibraryBook @relation(fields: [bookId], references: [id])
+  loans      LibraryLoan[]
+
+  @@index([schoolId, bookId])
+}
+
+model LibraryMembership {
+  id     String @id @default(cuid())
+  schoolId String
+  userId String
+  type   String @default("STUDENT") // STUDENT | STAFF
+  active Boolean @default(true)
+  loans  LibraryLoan[]
+
+  @@unique([schoolId, userId])
+}
+
+model LibraryLoan {
+  id         String @id @default(cuid())
+  schoolId   String
+  copyId     String
+  memberId   String
+  issueDate  DateTime @default(now())
+  dueDate    DateTime
+  returnDate DateTime?
+  status     String @default("ISSUED") // ISSUED | OVERDUE | RETURNED
+  copy       LibraryCopy @relation(fields: [copyId], references: [id])
+  membership LibraryMembership @relation(fields: [memberId], references: [id])
+  fine       Float @default(0)
+  fineStatus String @default("UNPAID") // UNPAID | PAID
+
+  @@index([schoolId, memberId])
+  @@index([schoolId, status])
+}
+
+model TransportRoute {
+  id        String @id @default(cuid())
+  schoolId  String
+  name      String
+  stopsJson String // JSON array [{name, order, time}]
+  distanceKm Float?
+  active    Boolean @default(true)
+  vehicles  TransportVehicle[]
+  passes    TransportPass[]
+
+  @@index([schoolId])
+}
+
+model TransportVehicle {
+  id           String @id @default(cuid())
+  schoolId     String
+  registrationNo String @unique
+  type         String @default("BUS")
+  capacity     Int
+  routeId      String?
+  route        TransportRoute? @relation(fields: [routeId], references: [id])
+  status       String @default("ACTIVE") // ACTIVE | MAINTENANCE
+
+  @@index([schoolId])
+}
+
+model TransportPass {
+  id        String @id @default(cuid())
+  schoolId  String
+  studentId String
+  routeId   String
+  route     TransportRoute @relation(fields: [routeId], references: [id])
+  stop      String
+  validFrom DateTime @default(now())
+  validTo   DateTime
+  fee       Float
+  status    String @default("ACTIVE") // ACTIVE | EXPIRED | PENDING
+
+  @@index([schoolId, studentId])
+}
+
+model Certificate {
+  id         String @id @default(cuid())
+  schoolId   String
+  studentId  String
+  type       String // TC | MIGRATION | CHARACTER | BONAFIDE | PROVISIONAL_DEGREE
+  purpose    String?
+  status     String @default("PENDING") // PENDING | APPROVED | REJECTED | ISSUED
+  remark     String?
+  requestNo  String @unique
+  referenceNo String? @unique
+  issuedAt   DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([schoolId, studentId])
+}
+
+model Notice {
+  id          String @id @default(cuid())
+  schoolId    String
+  title       String
+  category    String // EXAM | FEE | HOLIDAY | EVENT | GENERAL
+  body        String
+  audienceJson String // JSON { roles?: string[], schoolIds?: string[] }
+  pinned      Boolean @default(false)
+  publishedAt DateTime @default(now())
+  expiresAt   DateTime?
+  reads       NoticeRead[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([schoolId])
+}
+
+model NoticeRead {
+  id       String @id @default(cuid())
+  noticeId String
+  userId   String
+  readAt   DateTime @default(now())
+  notice   Notice @relation(fields: [noticeId], references: [id])
+
+  @@unique([noticeId, userId])
+}
+
+// ==============================================================================
+// Batch B: student welfare & admin — Grievance, Scholarships, Health, Clubs.
+// Specs: docs/specs/grievance.md, scholarships.md, health.md, clubs.md.
+// Every table carries schoolId (multi-tenant scoping).
+// ==============================================================================
+
+model Grievance {
+  id            String   @id @default(cuid())
+  schoolId      String
+  ticketNo      String   @unique
+  requesterId   String
+  category      String   // ACADEMIC | HOSTEL | FEES | TRANSPORT | GENERAL
+  subject       String
+  description   String
+  priority      String   @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
+  status        String   @default("OPEN") // OPEN | IN_PROGRESS | RESOLVED | CLOSED
+  assigneeUserId String?
+  resolution    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  messages      GrievanceMessage[]
+
+  @@index([schoolId, status])
+  @@index([schoolId, requesterId])
+  @@index([schoolId, assigneeUserId])
+}
+
+model GrievanceMessage {
+  id        String @id @default(cuid())
+  grievanceId String
+  grievance Grievance @relation(fields: [grievanceId], references: [id])
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([grievanceId])
+}
+
+model ScholarshipScheme {
+  id          String @id @default(cuid())
+  schoolId    String
+  name        String
+  type        String // MERIT | NEED_BASED | CATEGORY | SPORTS
+  value       Float  // amount in ₹ or percentage (see valueKind)
+  valueKind   String @default("AMOUNT") // AMOUNT | PERCENT
+  criteriaJson String // JSON { minPercentage?, category?, sports?, academicYear? }
+  active      Boolean @default(true)
+  applications ScholarshipApplication[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([schoolId])
+}
+
+model ScholarshipApplication {
+  id          String @id @default(cuid())
+  schoolId    String
+  studentId   String
+  schemeId    String
+  scheme      ScholarshipScheme @relation(fields: [schemeId], references: [id])
+  status      String @default("SUBMITTED") // SUBMITTED | APPROVED | REJECTED
+  eligible    Boolean
+  awardedAmount Float @default(0)
+  remark      String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([schoolId, status])
+  @@index([schoolId, studentId])
+}
+
+model StudentHealthRecord {
+  id                String @id @default(cuid())
+  schoolId          String
+  studentId         String @unique
+  bloodGroup        String?
+  allergies         String?
+  chronicConditions  String?
+  emergencyContact  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([schoolId])
+}
+
+model HealthVisit {
+  id          String @id @default(cuid())
+  schoolId    String
+  studentId   String
+  date        DateTime @default(now())
+  type        String @default("OPD") // OPD | FOLLOW_UP
+  symptoms    String
+  diagnosis   String?
+  prescription String?
+  status      String @default("COMPLETED") // SCHEDULED | COMPLETED | FOLLOW_UP_REQUIRED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  followUpDate DateTime?
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, date])
+}
+
+model Club {
+  id            String @id @default(cuid())
+  schoolId      String
+  name          String
+  category      String // TECHNICAL | CULTURAL | SPORTS | LITERARY | SOCIAL | OTHER
+  description   String?
+  coordinatorUserId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  members        ClubMembership[]
+  events         ClubEvent[]
+
+  @@index([schoolId])
+}
+
+model ClubMembership {
+  id        String @id @default(cuid())
+  clubId    String
+  club      Club @relation(fields: [clubId], references: [id])
+  studentId String
+  joinedAt  DateTime @default(now())
+  role      String @default("MEMBER") // MEMBER | COORDINATOR
+
+  @@unique([clubId, studentId])
+  @@index([studentId])
+}
+
+model ClubEvent {
+  id          String @id @default(cuid())
+  schoolId    String
+  clubId      String
+  club        Club @relation(fields: [clubId], references: [id])
+  title       String
+  description String?
+  date        DateTime
+  venue       String?
+  status      String @default("UPCOMING") // UPCOMING | COMPLETED | CANCELLED
+  rsvpCount   Int @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([schoolId, status])
+  @@index([clubId])
+}
+
+// ==============================================================================
+// Batch C: academic enrichments — Registration, Grade Card, Backlog, Question Bank.
+// Specs: docs/specs/registration.md, gradecard.md, backlog.md, questionbank.md.
+// Every table carries schoolId (multi-tenant scoping).
+// ==============================================================================
+
+model CourseRegistrationWindow {
+  id          String   @id @default(cuid())
+  schoolId    String
+  semester    Int
+  academicYear String
+  opensAt     DateTime
+  closesAt    DateTime
+  active      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([schoolId, semester, academicYear])
+  @@index([schoolId])
+}
+
+model CourseRegistration {
+  id         String   @id @default(cuid())
+  schoolId   String
+  courseId   String
+  studentId  String
+  semester   Int
+  academicYear String
+  status     String   @default("REGISTERED") // REGISTERED | DROPPED
+  createdAt  DateTime @default(now())
+
+  @@unique([schoolId, courseId, studentId, semester, academicYear])
+  @@index([schoolId, studentId])
+  @@index([schoolId, courseId])
+}
+
+model Transcript {
+  id          String   @id @default(cuid())
+  schoolId    String
+  studentId   String
+  transcriptNo String  @unique
+  type        String   @default("FULL") // FULL | SEMESTER
+  semester    Int?
+  academicYear String?
+  cgpa       Float?
+  sgpa       Float?
+  issuedAt    DateTime @default(now())
+
+  @@index([schoolId, studentId])
+}
+
+model BacklogEntry {
+  id          String   @id @default(cuid())
+  schoolId    String
+  studentId   String
+  courseId    String
+  semester    Int
+  academicYear String
+  marks       Float
+  grade       String
+  status      String   @default("BACKLOG") // BACKLOG | CLEARED
+  createdAt   DateTime @default(now())
+
+  @@unique([schoolId, studentId, courseId, semester, academicYear])
+  @@index([schoolId, studentId])
+}
+
+model RevaluationRequest {
+  id        String   @id @default(cuid())
+  schoolId  String
+  backlogId String
+  studentId String
+  reason    String
+  status    String   @default("REQUESTED") // REQUESTED | APPROVED | COMPLETED | REJECTED
+  remark    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId, studentId])
+}
+
+model SupplementaryExam {
+  id           String   @id @default(cuid())
+  schoolId     String
+  courseId     String
+  scheduleDate DateTime
+  venue        String?
+  status       String   @default("SCHEDULED") // SCHEDULED | COMPLETED
+  registrations SupplementaryRegistration[]
+  createdAt    DateTime @default(now())
+
+  @@index([schoolId])
+}
+
+model SupplementaryRegistration {
+  id        String   @id @default(cuid())
+  schoolId  String
+  examId    String
+  exam      SupplementaryExam @relation(fields: [examId], references: [id])
+  studentId String
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, examId, studentId])
+  @@index([schoolId, studentId])
+}
+
+model Question {
+  id        String   @id @default(cuid())
+  schoolId  String
+  courseId  String
+  unit      String?
+  type      String // MCQ | SHORT | LONG | NUMERICAL
+  difficulty String  @default("MEDIUM") // EASY | MEDIUM | HARD
+  content   String
+  status    String   @default("DRAFT") // DRAFT | SUBMITTED | APPROVED | REJECTED
+  authorId  String
+  remark    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId, courseId])
+}
+
+model ExamDuty {
+  id           String   @id @default(cuid())
+  schoolId     String
+  examId       String
+  facultyUserId String
+  date         DateTime
+  venue        String?
+  role         String   @default("INVIGILATOR") // INVIGILATOR | CHIEF_SUPERINTENDENT
+  createdAt    DateTime @default(now())
+
+  @@unique([schoolId, examId, facultyUserId])
+  @@index([schoolId, facultyUserId])
+}
+
+// ==============================================================================
+// Batch D — Career & Alumni expansion
+// (placement, internships, alumni jobs, mentorship). Every model carries
+// `schoolId` for multi-tenant scoping.
+// ==============================================================================
+
+model PlacementCompany {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  sector    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+model PlacementDrive {
+  id        String   @id @default(cuid())
+  schoolId  String
+  companyId String
+  title     String
+  date      DateTime
+  mode      String // ONLINE | OFFLINE
+  role      String
+  package   String?
+  location  String?
+  createdAt DateTime @default(now())
+
+  @@index([schoolId, companyId])
+}
+
+model PlacementPost {
+  id         String   @id @default(cuid())
+  schoolId   String
+  companyId  String
+  driveId    String?
+  title      String
+  package    String?
+  deadline   DateTime?
+  eligibility String? // program/batch eligibility text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([schoolId, companyId])
+}
+
+model PlacementApplication {
+  id        String   @id @default(cuid())
+  schoolId  String
+  postId    String
+  studentId String
+  status    String   @default("APPLIED") // APPLIED | SHORTLISTED | OFFERED | PLACED | REJECTED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, postId, studentId])
+  @@index([schoolId, studentId])
+  @@index([schoolId, postId])
+}
+
+model InternshipListing {
+  id          String   @id @default(cuid())
+  schoolId    String
+  role        String
+  companyName String
+  mode        String // ON-SITE | REMOTE | HYBRID
+  duration    String
+  stipend     String?
+  deadline    DateTime?
+  description  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([schoolId])
+}
+
+model Internship {
+  id          String   @id @default(cuid())
+  schoolId    String
+  listingId   String
+  studentId   String
+  status      String   @default("APPLIED") // APPLIED | APPROVED | ONGOING | COMPLETED | REJECTED
+  startDate   DateTime?
+  endDate     DateTime?
+  certificateNo String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([schoolId, listingId, studentId])
+  @@index([schoolId, studentId])
+  @@index([schoolId, listingId])
+}
+
+model AlumniJob {
+  id          String   @id @default(cuid())
+  schoolId    String
+  title       String
+  company     String
+  location    String?
+  type        String   @default("FULL_TIME") // FULL_TIME | PART_TIME | CONTRACT
+  description String
+  contact     String
+  postedBy    String // user id (alumnus)
+  postedByName String
+  status      String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+}
+
+model AlumniJobApplication {
+  id        String   @id @default(cuid())
+  schoolId  String
+  jobId     String
+  studentId String
+  status    String   @default("APPLIED")
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, jobId, studentId])
+  @@index([schoolId, studentId])
+}
+
+model MentorProfile {
+  id         String   @id @default(cuid())
+  schoolId   String
+  userId     String
+  name       String
+  field      String
+  company    String?
+  experience  Int // years
+  about      String?
+  available  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([schoolId, userId])
+  @@index([schoolId])
+}
+
+model MentorshipRequest {
+  id        String   @id @default(cuid())
+  schoolId  String
+  mentorId  String // MentorProfile id
+  studentId String
+  message   String?
+  status    String   @default("PENDING") // PENDING | ACCEPTED | REJECTED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, mentorId, studentId])
+  @@index([schoolId, studentId])
+}
+
+model MentorshipPairing {
+  id        String   @id @default(cuid())
+  schoolId  String
+  mentorId  String
+  studentId String
+  status    String   @default("ACTIVE") // ACTIVE | ENDED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, mentorId, studentId])
+  @@index([schoolId, studentId])
+}
+
+model MentorshipMeeting {
+  id        String   @id @default(cuid())
+  schoolId  String
+  pairingId String
+  date      DateTime
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@index([schoolId, pairingId])
+}
+
+model ParentStudentLink {
+  id         String   @id @default(cuid())
+  schoolId   String
+  parentUserId String
+  studentId  String
+  createdAt  DateTime @default(now())
+
+  @@unique([schoolId, parentUserId, studentId])
+  @@index([schoolId, parentUserId])
+  @@index([schoolId, studentId])
+}
+
+model SavedReport {
+  id        String   @id @default(cuid())
+  schoolId  String
+  ownerId   String
+  name      String
+  type      String
+  filters   String @default("{}") // JSON-encoded filter object
+  createdAt DateTime @default(now())
+
+  @@index([schoolId, ownerId])
+}
+
+model IdentityCard {
+  id        String    @id @default(cuid())
+  schoolId  String
+  holderType String // STUDENT | STAFF
+  holderId  String
+  cardNumber String
+  status    String    @default("ACTIVE") // ACTIVE | REVOKED
+  issuedAt  DateTime  @default(now())
+  revokedAt DateTime?
+
+  @@unique([schoolId, cardNumber])
+  @@unique([schoolId, holderType, holderId])
+  @@index([schoolId, holderType])
+}
