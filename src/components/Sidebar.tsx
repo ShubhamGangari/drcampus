@@ -397,12 +397,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ];
       case "SUPER_ADMIN":
         return [
-          { id: "overview", label: "University Secretariat Overview", icon: Building2, badge: "Central", badgeColor: "bg-slate-100 text-slate-700" },
-          { id: "admissions", label: "Admissions Counseling", icon: Users, badge: "Merit Rank", badgeColor: "bg-indigo-50 text-indigo-700" },
-          { id: "allotment", label: "Provisional Seat Allotment", icon: FileText, badge: "Letters", badgeColor: "bg-emerald-50 text-emerald-700" },
-          { id: "schools", label: "Constituent Schools", icon: Landmark, badge: "6 Schools", badgeColor: "bg-blue-50 text-blue-700" },
-          { id: "naac", label: "NAAC Criteria 1–7", icon: Award, badge: "Grade A+", badgeColor: "bg-amber-50 text-amber-700" },
-          { id: "circulars", label: "Statutory Circulars", icon: Send, badge: "Dispatched", badgeColor: "bg-purple-50 text-purple-700" },
+          { id: "overview", label: "Admin Overview", icon: ShieldCheck, badge: "Platform", badgeColor: "bg-slate-100 text-slate-700" },
+          { id: "roles", label: "Roles & Permissions", icon: KeyRound, badge: "Console", badgeColor: "bg-indigo-50 text-indigo-700" },
+          { id: "officers", label: "Officers", icon: UserPlus, badge: "Manage", badgeColor: "bg-emerald-50 text-emerald-700" },
+          { id: "audit", label: "Audit Log", icon: FileText, badge: "Trace", badgeColor: "bg-amber-50 text-amber-700" },
+          { id: "schools", label: "Schools", icon: Landmark, badge: "Tenants", badgeColor: "bg-blue-50 text-blue-700" },
+          { id: "delegates", label: "Delegated Accounts", icon: Users, badge: "Access", badgeColor: "bg-purple-50 text-purple-700" },
         ];
       default:
         return [];

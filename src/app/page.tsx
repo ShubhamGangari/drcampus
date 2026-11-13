@@ -9,6 +9,7 @@ import { ExamControllerWorkspace } from "@/components/portal/ExamControllerWorks
 import { DeanWorkspace } from "@/components/portal/DeanWorkspace";
 import { StudentWorkspace } from "@/components/portal/StudentWorkspace";
 import { RegistrarWorkspace } from "@/components/portal/RegistrarWorkspace";
+import { AdminWorkspace } from "@/components/portal/AdminWorkspace";
 import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
 import { KpiStrip } from "@/components/KpiStrip";
 import { DashboardCharts } from "@/components/DashboardCharts";
@@ -209,8 +210,11 @@ function UMSDashboard() {
           {activeRole === "STUDENT" && (
             <StudentWorkspace activeSchoolId={activeSchoolId} activeSection={activeSection} />
           )}
-          {(activeRole === "REGISTRAR_ADMIN" || activeRole === "SUPER_ADMIN") && (
+          {activeRole === "REGISTRAR_ADMIN" && (
             <RegistrarWorkspace activeSchoolId={activeSchoolId} activeSection={activeSection} />
+          )}
+          {activeRole === "SUPER_ADMIN" && (
+            <AdminWorkspace activeSchoolId={activeSchoolId} activeSection={activeSection} />
           )}
         </main>
 
