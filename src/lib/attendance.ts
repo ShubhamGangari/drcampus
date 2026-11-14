@@ -23,6 +23,10 @@ export type AttendanceStatus = "PRESENT" | "ABSENT";
 /**
  * Row shape returned by both `GET /api/attendance/report` and
  * `GET /api/attendance/defaulter`. `percentage` is `round(present / totalDays * 100, 2)`.
+ *
+ * `absentDates` (always present on report rows) lists the dates in the window with
+ * status ABSENT, ascending, formatted `DD Mon` — e.g. `["12 Mar", "14 Mar"]`.
+ * Defaulter rows from the backend do not include it, so it is optional there.
  */
 export interface AttendanceRecordRow {
   studentId: string;
@@ -31,6 +35,7 @@ export interface AttendanceRecordRow {
   totalDays: number;
   presentDays: number;
   percentage: number;
+  absentDates?: string[];
 }
 
 // ---- Request bodies / filter shapes ------------------------------------------
@@ -44,18 +49,22 @@ export interface MarkAttendanceInput {
   records: { studentId: string; status: AttendanceStatus }[];
 }
 
-/** Filters for `GET /api/attendance/report`. */
+/** Filters for `GET /api/attendance/report`. `from`/`to` are `YYYY-MM-DD`. */
 export interface AttendanceReportFilters {
   courseId: string;
   studentId?: string;
   schoolId?: string;
+  from?: string;
+  to?: string;
 }
 
-/** Filters for `GET /api/attendance/defaulter`. */
+/** Filters for `GET /api/attendance/defaulter`. `from`/`to` are `YYYY-MM-DD`. */
 export interface DefaulterFilters {
   courseId: string;
   threshold: number;
   schoolId?: string;
+  from?: string;
+  to?: string;
 }
 
 // ---- Drill-down (per-student day view + per-teacher "Marked by") ------------
@@ -85,12 +94,13 @@ export interface AttendanceDetail {
   teachers: AttendanceTeacherSummary[];
 }
 
-/** Filters for `GET /api/attendance/detail`. */
+/** Filters for `GET /api/attendance/detail`. `status` filters the returned `days`. */
 export interface AttendanceDetailFilters {
   courseId: string;
   studentId?: string;
   schoolId?: string;
   teacherId?: string;
+  status?: "ALL" | "PRESENT" | "ABSENT";
 }
 
 /** Body for `POST /api/attendance/update`. */
@@ -100,6 +110,83 @@ export interface UpdateAttendanceInput {
   studentId: string;
   date: string;
   status: AttendanceStatus;
+}
+
+// ---- Attendance register (GET /api/attendance/register) -----------------------
+
+/** One row of the monthly register matrix (`cells[i]` aligns with `header[i]`). */
+export interface AttendanceRegisterRow {
+  studentId: string;
+  rollNo: string;
+  name: string;
+  cells: ("P" | "A" | null)[];
+  present: number;
+  total: number;
+  percentage: number;
+  absentDates: string[];
+}
+
+/** Per-teacher marking summary for the register. */
+export interface AttendanceRegisterTeacher {
+  teacherId: string;
+  teacherName: string;
+  markedCount: number;
+}
+
+/** Response of `GET /api/attendance/register`. */
+export interface AttendanceRegister {
+  /** `DD Mon` dates in the month having ≥1 record, ascending. */
+  header: string[];
+  rows: AttendanceRegisterRow[];
+  teachers: AttendanceRegisterTeacher[];
+}
+
+/** Filters for `GET /api/attendance/register`. `month` is `YYYY-MM`. */
+export interface AttendanceRegisterFilters {
+  courseId: string;
+  month: string;
+  schoolId?: string;
+}
+
+// ---- Attendance analytics (GET /api/attendance/analytics) ---------------------
+
+/** One ISO-week bucket of present/absent counts. */
+export interface AttendanceAnalyticsWeek {
+  weekLabel: string;
+  present: number;
+  absent: number;
+}
+
+/** Per-teacher marking summary from analytics. */
+export interface AttendanceAnalyticsTeacher {
+  teacherId: string;
+  teacherName: string;
+  markedCount: number;
+  dates: string[];
+}
+
+/** Response of `GET /api/attendance/analytics`. */
+export interface AttendanceAnalytics {
+  weeks: AttendanceAnalyticsWeek[];
+  teachers: AttendanceAnalyticsTeacher[];
+}
+
+/** Filters for `GET /api/attendance/analytics`. `from`/`to` are `YYYY-MM-DD`. */
+export interface AttendanceAnalyticsFilters {
+  courseId: string;
+  schoolId?: string;
+  from?: string;
+  to?: string;
+}
+
+// ---- Notify defaulters (POST /api/attendance/notify-defaulters) ---------------
+
+/** Body for `POST /api/attendance/notify-defaulters`. */
+export interface NotifyDefaultersInput {
+  courseId: string;
+  threshold: number;
+  schoolId?: string;
+  message?: string;
 }
 
 // ---- Role helpers -------------------------------------------------------------
@@ -126,6 +213,21 @@ export function canMarkAttendance(role?: UserRole): boolean {
 /** Dean / Registrar / Faculty may view the defaulter list. */
 export function canViewDefaulter(role?: UserRole): boolean {
   return role === "FACULTY" || role === "DEAN" || role === "REGISTRAR_ADMIN" || role === "SUPER_ADMIN";
+}
+
+/** Faculty / Registrar / Super Admin may send defaulter notifications. */
+export function canNotifyDefaulters(role?: UserRole): boolean {
+  return role === "FACULTY" || role === "REGISTRAR_ADMIN" || role === "SUPER_ADMIN";
+}
+
+/** Faculty / Dean / Registrar / Super Admin may view the monthly register. */
+export function canViewRegister(role?: UserRole): boolean {
+  return (
+    role === "FACULTY" ||
+    role === "DEAN" ||
+    role === "REGISTRAR_ADMIN" ||
+    role === "SUPER_ADMIN"
+  );
 }
 
 // ---- Pure business rules (spec §6 + acceptance criteria) ----------------------
@@ -209,31 +311,60 @@ export function markAttendance(input: MarkAttendanceInput): Promise<{ marked: nu
   });
 }
 
-/** `GET /api/attendance/report?courseId=&studentId=&schoolId=` → rows. */
+/** `GET /api/attendance/report?courseId=&studentId=&schoolId=&from=&to=` → rows. */
 export function fetchAttendanceReport(filters: AttendanceReportFilters): Promise<AttendanceRecordRow[]> {
   const p = new URLSearchParams({ courseId: filters.courseId });
   if (filters.studentId) p.set("studentId", filters.studentId);
   if (filters.schoolId) p.set("schoolId", filters.schoolId);
+  if (filters.from) p.set("from", filters.from);
+  if (filters.to) p.set("to", filters.to);
   return request(`/api/attendance/report?${p.toString()}`);
 }
 
-/** `GET /api/attendance/defaulter?courseId=&threshold=&schoolId=` → rows. */
+/** `GET /api/attendance/defaulter?courseId=&threshold=&schoolId=&from=&to=` → rows. */
 export function fetchDefaulter(filters: DefaulterFilters): Promise<AttendanceRecordRow[]> {
   const p = new URLSearchParams({
     courseId: filters.courseId,
     threshold: String(filters.threshold),
   });
   if (filters.schoolId) p.set("schoolId", filters.schoolId);
+  if (filters.from) p.set("from", filters.from);
+  if (filters.to) p.set("to", filters.to);
   return request(`/api/attendance/defaulter?${p.toString()}`);
 }
 
-/** `GET /api/attendance/detail?courseId=&studentId=&schoolId=&teacherId=` → detail. */
+/** `GET /api/attendance/detail?courseId=&studentId=&schoolId=&teacherId=&status=` → detail. */
 export function fetchAttendanceDetail(filters: AttendanceDetailFilters): Promise<AttendanceDetail> {
   const p = new URLSearchParams({ courseId: filters.courseId });
   if (filters.studentId) p.set("studentId", filters.studentId);
   if (filters.schoolId) p.set("schoolId", filters.schoolId);
   if (filters.teacherId) p.set("teacherId", filters.teacherId);
+  if (filters.status && filters.status !== "ALL") p.set("status", filters.status);
   return request(`/api/attendance/detail?${p.toString()}`);
+}
+
+/** `GET /api/attendance/register?courseId=&month=YYYY-MM&schoolId=` → matrix. */
+export function fetchAttendanceRegister(filters: AttendanceRegisterFilters): Promise<AttendanceRegister> {
+  const p = new URLSearchParams({ courseId: filters.courseId, month: filters.month });
+  if (filters.schoolId) p.set("schoolId", filters.schoolId);
+  return request(`/api/attendance/register?${p.toString()}`);
+}
+
+/** `GET /api/attendance/analytics?courseId=&schoolId=&from=&to=` → weekly stats. */
+export function fetchAttendanceAnalytics(filters: AttendanceAnalyticsFilters): Promise<AttendanceAnalytics> {
+  const p = new URLSearchParams({ courseId: filters.courseId });
+  if (filters.schoolId) p.set("schoolId", filters.schoolId);
+  if (filters.from) p.set("from", filters.from);
+  if (filters.to) p.set("to", filters.to);
+  return request(`/api/attendance/analytics?${p.toString()}`);
+}
+
+/** `POST /api/attendance/notify-defaulters` (FACULTY, REGISTRAR_ADMIN, SUPER_ADMIN) → 201 { notified }. */
+export function notifyDefaulters(input: NotifyDefaultersInput): Promise<{ notified: number }> {
+  return request("/api/attendance/notify-defaulters", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 /** `POST /api/attendance/update` (FACULTY) → updated record. */

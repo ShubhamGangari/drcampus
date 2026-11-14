@@ -41,3 +41,18 @@ export const updateAttendanceSchema = z.object({
   date: isoDateSchema,
   status: z.enum(ATTENDANCE_STATUSES),
 });
+
+/**
+ * Body for `POST /api/attendance/notify-defaulters` — send in-app defaulter
+ * alerts (type `attendance_defaulter`) to students below `threshold`%.
+ * `schoolId` required only for Central officers; `message` overrides the default
+ * notification body when provided.
+ */
+export const notifyDefaultersSchema = z.object({
+  courseId: z.string().min(1),
+  threshold: z.number().min(0).max(100).finite(),
+  schoolId: z.string().optional(),
+  message: z.string().max(500).optional(),
+});
+
+export type NotifyDefaultersInput = z.infer<typeof notifyDefaultersSchema>;

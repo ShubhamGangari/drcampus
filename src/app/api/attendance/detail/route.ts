@@ -11,13 +11,14 @@ const VIEW_ROLES = ['FACULTY', 'STUDENT', 'DEAN', 'REGISTRAR_ADMIN', 'SUPER_ADMI
 const isoDate = (d: Date): string => d.toISOString().slice(0, 10);
 
 // ---------------------------------------------------------------------------
-// GET /api/attendance/detail?courseId=&studentId=&schoolId=&teacherId=
-//   (FACULTY, STUDENT, DEAN, REGISTRAR_ADMIN)
+// GET /api/attendance/detail?courseId=&studentId=&schoolId=&teacherId=&status=
+//   (FACULTY, STUDENT, DEAN, REGISTRAR_ADMIN, SUPER_ADMIN)
 //   200 {
 //     student?: { studentId, rollNo, name } | null,
 //     days: [{ recordId, date, status, markedById, teacherName }],
 //     teachers: [{ teacherId, teacherName, markedCount, dates }],
 //   }
+// Optional `status` = ALL (default) | PRESENT | ABSENT filters the `days` list.
 // Supports drill-down: per-student day-by-day present/absent (when studentId is
 // supplied) and a per-teacher "Marked by" summary (always). `teacherId` further
 // filters the day list to records marked by that teacher.
@@ -33,6 +34,15 @@ export const GET = withAuth(async (request, { user }) => {
         const studentParam = url.searchParams.get('studentId');
         const teacherParam = url.searchParams.get('teacherId');
         const schoolQuery = url.searchParams.get('schoolId');
+
+        const statusRaw = url.searchParams.get('status');
+        let statusFilter: 'ALL' | 'PRESENT' | 'ABSENT' = 'ALL';
+        if (statusRaw) {
+            if (statusRaw !== 'ALL' && statusRaw !== 'PRESENT' && statusRaw !== 'ABSENT') {
+                throw new ApiError(400, 'VALIDATION_ERROR', 'status must be ALL, PRESENT or ABSENT');
+            }
+            statusFilter = statusRaw;
+        }
 
         if (!courseId) {
             throw new ApiError(400, 'VALIDATION_ERROR', 'courseId is required');
@@ -97,9 +107,12 @@ export const GET = withAuth(async (request, { user }) => {
                 }
             }
 
+            const filteredDays =
+                statusFilter === 'ALL' ? days : days.filter((d) => d.status === statusFilter);
+
             return successResponse({
                 student,
-                days,
+                days: filteredDays,
                 teachers: computeTeacherSummary(days, teacherName),
             });
         });

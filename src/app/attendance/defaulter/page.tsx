@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Download } from "lucide-react";
+import { BellRing, CalendarRange, Download } from "lucide-react";
 import { PageTitle } from "@/components/attendance/AttendanceShell";
 import { AttendanceTable } from "@/components/attendance/AttendanceTable";
+import { Toast } from "@/components/admissions/Toast";
 import { EmptyState, ErrorState, InlineLoader, Spinner } from "@/components/admissions/States";
 import { Field, SelectInput, TextInput } from "@/components/admissions/FormControls";
 import { SchoolSelect } from "@/components/fees/SchoolSelect";
@@ -13,9 +14,11 @@ import { CourseOutcomeSet, fetchCourses } from "@/lib/obe";
 import {
   AttendanceApiError,
   AttendanceRecordRow,
+  canNotifyDefaulters,
   canViewDefaulter,
   downloadCsv,
   fetchDefaulter,
+  notifyDefaulters,
   toCsv,
 } from "@/lib/attendance";
 
@@ -25,11 +28,14 @@ export default function AttendanceDefaulterPage() {
   const { currentUser } = useUniversity();
   const isCentral = currentUser?.schoolId === "ALL";
   const permitted = canViewDefaulter(currentUser?.role);
+  const canNotify = canNotifyDefaulters(currentUser?.role);
 
   const [schoolId, setSchoolId] = useState("");
   const [programId, setProgramId] = useState("");
   const [courseId, setCourseId] = useState("");
   const [thresholdInput, setThresholdInput] = useState(DEFAULT_THRESHOLD);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
   const [courses, setCourses] = useState<CourseOutcomeSet[]>([]);
   const [coursesLoading, setCoursesLoading] = useState(false);
@@ -38,6 +44,9 @@ export default function AttendanceDefaulterPage() {
   const [rows, setRows] = useState<AttendanceRecordRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [notifying, setNotifying] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const threshold = Number(thresholdInput);
   const thresholdValid = Number.isFinite(threshold) && threshold > 0 && threshold <= 100;
@@ -81,6 +90,8 @@ export default function AttendanceDefaulterPage() {
           courseId: cid,
           threshold: t,
           schoolId: isCentral ? schoolId : undefined,
+          from: from || undefined,
+          to: to || undefined,
         });
         setRows(data);
       } catch (e) {
@@ -90,8 +101,31 @@ export default function AttendanceDefaulterPage() {
         setLoading(false);
       }
     },
-    [isCentral, schoolId]
+    [isCentral, schoolId, from, to]
   );
+
+  const handleNotify = async () => {
+    if (!canNotify || !courseId || !thresholdValid || notifying) return;
+    setNotifying(true);
+    try {
+      const res = await notifyDefaulters({
+        courseId,
+        threshold,
+        schoolId: isCentral ? schoolId : undefined,
+      });
+      setToast({
+        message: `Notified ${res.notified} defaulter${res.notified === 1 ? "" : "s"}.`,
+        type: "success",
+      });
+    } catch (e) {
+      setToast({
+        message: e instanceof AttendanceApiError ? e.message : "Unable to notify defaulters.",
+        type: "error",
+      });
+    } finally {
+      setNotifying(false);
+    }
+  };
 
   useEffect(() => {
     if (courseId && thresholdValid) {
@@ -130,14 +164,30 @@ export default function AttendanceDefaulterPage() {
         title="Defaulter List"
         subtitle="Students with attendance below the selected threshold."
         action={
-          <button
-            type="button"
-            onClick={exportCsv}
-            disabled={rows.length === 0}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-          >
-            <Download className="h-3.5 w-3.5" /> Export CSV
-          </button>
+          <div className="flex items-center gap-2">
+            {canNotify && (
+              <button
+                type="button"
+                onClick={handleNotify}
+                disabled={!courseId || !thresholdValid || notifying}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {notifying ? <InlineLoader label="Notifying…" /> : (
+                  <>
+                    <BellRing className="h-3.5 w-3.5" /> Notify defaulters
+                  </>
+                )}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={rows.length === 0}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <Download className="h-3.5 w-3.5" /> Export CSV
+            </button>
+          </div>
         }
       />
 
@@ -200,6 +250,46 @@ export default function AttendanceDefaulterPage() {
         </Field>
       </div>
 
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+          <div className="flex items-center gap-2 sm:mt-6">
+            <div className="h-8 w-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+              <CalendarRange className="h-4 w-4 text-slate-500" />
+            </div>
+            <span className="text-xs font-black text-slate-700">Date range</span>
+          </div>
+          <Field label="From" htmlFor="defaulter-from">
+            <TextInput
+              id="defaulter-from"
+              type="date"
+              value={from}
+              max={to || undefined}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+          </Field>
+          <Field label="To" htmlFor="defaulter-to">
+            <TextInput
+              id="defaulter-to"
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </Field>
+          <button
+            type="button"
+            onClick={() => {
+              setFrom("");
+              setTo("");
+            }}
+            disabled={!from && !to}
+            className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
       {coursesError && (
         <div className="mt-6">
           <ErrorState message={coursesError} onRetry={() => setProgramId((p) => p)} />
@@ -227,6 +317,10 @@ export default function AttendanceDefaulterPage() {
           <AttendanceTable rows={rows} />
         )}
       </div>
+
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }

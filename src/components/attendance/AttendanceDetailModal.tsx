@@ -12,6 +12,8 @@ import {
     updateAttendanceRecord,
 } from "@/lib/attendance";
 
+type StatusFilter = "ALL" | "PRESENT" | "ABSENT";
+
 interface Props {
     open: boolean;
     onClose: () => void;
@@ -20,6 +22,102 @@ interface Props {
     student: { studentId: string; rollNo: string; name: string } | null;
     /** Only Faculty may edit individual records. */
     canEdit?: boolean;
+    /** Initial status the detail list is filtered to when the modal opens. */
+    initialStatus?: StatusFilter;
+}
+
+const STATUS_TABS: { value: StatusFilter; label: string }[] = [
+    { value: "ALL", label: "All" },
+    { value: "PRESENT", label: "Present" },
+    { value: "ABSENT", label: "Absent" },
+];
+
+/**
+ * Renders a small month calendar (grid of days) where each day with a record is
+ * colored — green PRESENT, red ABSENT, grey no-record. The month shown is the one
+ * containing the most recent day in the drill-down list.
+ */
+function MonthCalendar({ days }: { days: AttendanceDayRow[] }) {
+    const dayMap = new Map(days.map((d) => [d.date.slice(0, 10), d.status]));
+
+    const first = days[0];
+    let year = new Date().getFullYear();
+    let month = new Date().getMonth() + 1;
+    if (first) {
+        const y = parseInt(first.date.slice(0, 4), 10);
+        const m = parseInt(first.date.slice(5, 7), 10);
+        if (Number.isInteger(y) && Number.isInteger(m)) {
+            year = y;
+            month = m;
+        }
+    }
+
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const firstWeekday = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
+    const monthLabel = new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("en-GB", {
+        month: "long",
+        year: "numeric",
+    });
+    const weekdayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+    const cells = [];
+    for (let i = 0; i < firstWeekday; i++) cells.push(null);
+    for (let d = 1; d <= lastDay; d++) {
+        const key = `${year}-${pad(month)}-${pad(d)}`;
+        cells.push({ day: d, key, status: dayMap.get(key) ?? null });
+    }
+
+    return (
+        <div className="rounded-2xl border border-slate-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                    {monthLabel}
+                </h3>
+                <div className="flex items-center gap-3 text-[10px] font-semibold text-slate-500">
+                    <span className="inline-flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-sm bg-emerald-500" /> Present
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-sm bg-rose-500" /> Absent
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-sm bg-slate-200" /> No record
+                    </span>
+                </div>
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+                {weekdayLabels.map((wd) => (
+                    <div
+                        key={wd}
+                        className="text-center text-[10px] font-bold text-slate-400 pb-1"
+                    >
+                        {wd}
+                    </div>
+                ))}
+                {cells.map((cell, i) => {
+                    if (!cell) {
+                        return <div key={`empty-${i}`} />;
+                    }
+                    const tone =
+                        cell.status === "PRESENT"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : cell.status === "ABSENT"
+                                ? "bg-rose-50 text-rose-700 border-rose-300 font-bold"
+                                : "bg-slate-50 text-slate-400 border-slate-100";
+                    return (
+                        <div
+                            key={cell.key}
+                            title={cell.status ? `${cell.key} — ${cell.status === "PRESENT" ? "present" : "absent"}` : `${cell.key} — no record`}
+                            className={`h-8 flex items-center justify-center rounded-lg border text-[11px] tabular-nums ${tone}`}
+                        >
+                            {cell.day}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
 }
 
 function formatDisplayDate(iso: string): string {
@@ -46,35 +144,44 @@ function StatusBadge({ status }: { status: string }) {
     );
 }
 
-export function AttendanceDetailModal({ open, onClose, courseId, schoolId, student, canEdit }: Props) {
+export function AttendanceDetailModal({ open, onClose, courseId, schoolId, student, canEdit, initialStatus = "ALL" }: Props) {
     const [days, setDays] = useState<AttendanceDayRow[]>([]);
     const [teachers, setTeachers] = useState<AttendanceTeacherSummary[]>([]);
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatus);
     const [loading, setLoading] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [savingId, setSavingId] = useState<string | null>(null);
 
-    const load = useCallback(async () => {
-        if (!courseId || !student) return;
-        setLoading(true);
-        setLoadError(null);
-        try {
-            const data = await fetchAttendanceDetail({
-                courseId,
-                schoolId,
-                studentId: student.studentId,
-            });
-            setDays(data.days);
-            setTeachers(data.teachers);
-        } catch (e) {
-            setLoadError(e instanceof AttendanceApiError ? e.message : "Unable to load attendance detail.");
-        } finally {
-            setLoading(false);
-        }
-    }, [courseId, schoolId, student]);
+    const load = useCallback(
+        async (status: StatusFilter = statusFilter) => {
+            if (!courseId || !student) return;
+            setLoading(true);
+            setLoadError(null);
+            try {
+                const data = await fetchAttendanceDetail({
+                    courseId,
+                    schoolId,
+                    studentId: student.studentId,
+                    status,
+                });
+                setDays(data.days);
+                setTeachers(data.teachers);
+            } catch (e) {
+                setLoadError(e instanceof AttendanceApiError ? e.message : "Unable to load attendance detail.");
+            } finally {
+                setLoading(false);
+            }
+        },
+        [courseId, schoolId, student, statusFilter]
+    );
 
     useEffect(() => {
-        if (open) void load();
-    }, [open, load]);
+        if (open) {
+            const s = initialStatus;
+            setStatusFilter(s);
+            void load(s);
+        }
+    }, [open, load, initialStatus]);
 
     const toggleStatus = async (day: AttendanceDayRow) => {
         if (!student || !canEdit || savingId) return;
@@ -127,6 +234,38 @@ export function AttendanceDetailModal({ open, onClose, courseId, schoolId, stude
                             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Percentage</div>
                         </div>
                     </div>
+                )}
+
+                {student && (
+                    <div>
+                        <h3 className="mb-2 text-[11px] font-black uppercase tracking-wider text-slate-500">
+                            Show
+                        </h3>
+                        <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50/60 p-1 gap-1">
+                            {STATUS_TABS.map((tab) => (
+                                <button
+                                    key={tab.value}
+                                    type="button"
+                                    onClick={() => {
+                                        setStatusFilter(tab.value);
+                                        void load(tab.value);
+                                    }}
+                                    aria-pressed={statusFilter === tab.value}
+                                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                                        statusFilter === tab.value
+                                            ? "bg-white text-slate-900 shadow-2xs border border-slate-200"
+                                            : "text-slate-500 hover:text-slate-800"
+                                    }`}
+                                >
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {student && days.length > 0 && (
+                    <MonthCalendar days={days} />
                 )}
 
                 {loading ? (

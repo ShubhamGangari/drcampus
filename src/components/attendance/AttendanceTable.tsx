@@ -22,13 +22,19 @@ function PercentageBadge({ value }: { value: number }) {
  *
  * When `onSelectRow` is provided, each row becomes clickable to open the drill-down
  * day view (per-student present/absent by day). A "View" chip appears as a hint.
+ *
+ * When `onAbsentClick` is provided and a row carries `absentDates`, an "Absent on:"
+ * line renders under the percentage and is clickable to open the drill-down modal
+ * pre-filtered to the ABSENT status.
  */
 export function AttendanceTable({
   rows,
   onSelectRow,
+  onAbsentClick,
 }: {
   rows: AttendanceRecordRow[];
   onSelectRow?: (row: AttendanceRecordRow) => void;
+  onAbsentClick?: (row: AttendanceRecordRow) => void;
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs">
@@ -82,7 +88,31 @@ export function AttendanceTable({
                   {row.presentDays}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <PercentageBadge value={row.percentage} />
+                  <div className="flex flex-col items-end gap-1">
+                    <PercentageBadge value={row.percentage} />
+                    {row.absentDates && row.absentDates.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={onAbsentClick ? (e) => {
+                          e.stopPropagation();
+                          onAbsentClick(row);
+                        } : undefined}
+                        title={
+                          onAbsentClick
+                            ? "View absent days"
+                            : "Absent dates in the selected window"
+                        }
+                        aria-label={`Absent on ${row.absentDates.join(", ")}`}
+                        className={`text-[10px] font-semibold ${
+                          onAbsentClick
+                            ? "text-rose-600 underline decoration-rose-300 underline-offset-2 hover:text-rose-800 cursor-pointer"
+                            : "text-rose-500"
+                        }`}
+                      >
+                        Absent on: {row.absentDates.join(", ")}
+                      </button>
+                    )}
+                  </div>
                 </td>
                 {onSelectRow && (
                   <td className="px-4 py-3 text-right">

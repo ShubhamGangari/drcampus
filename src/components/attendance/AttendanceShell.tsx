@@ -8,6 +8,7 @@ import {
   ListChecks,
   AlertTriangle,
   CalendarCheck,
+  CalendarRange,
   ShieldAlert,
 } from "lucide-react";
 import { useUniversity } from "@/context/UniversityContext";
@@ -17,6 +18,7 @@ const NAV_ITEMS = [
   { href: "/attendance/mark", label: "Mark", icon: ClipboardCheck },
   { href: "/attendance/report", label: "Report", icon: ListChecks },
   { href: "/attendance/defaulter", label: "Defaulter", icon: AlertTriangle },
+  { href: "/attendance/register", label: "Register", icon: CalendarRange },
 ];
 
 /**
@@ -86,7 +88,7 @@ export function AttendanceShell({ children }: { children: React.ReactNode }) {
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 truncate hidden sm:block">
-                  Course-wise roll-call • Report • Defaulter watch
+                  Course-wise roll-call • Report • Register • Defaulter watch
                 </p>
               </div>
             </div>
