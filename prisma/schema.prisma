@@ -798,6 +798,7 @@ model TransportRoute {
   active    Boolean @default(true)
   vehicles  TransportVehicle[]
   passes    TransportPass[]
+  broadcasts TransportBroadcast[]
 
   @@index([schoolId])
 }
@@ -828,6 +829,26 @@ model TransportPass {
   status    String @default("ACTIVE") // ACTIVE | EXPIRED | PENDING
 
   @@index([schoolId, studentId])
+}
+
+model TransportBroadcast {
+  id         String   @id @default(cuid())
+  schoolId   String
+  routeId    String?  // null = All Routes, else specific route
+  route      TransportRoute? @relation(fields: [routeId], references: [id])
+  vehicleNo  String?  // e.g. "UK-07-PA-1234"
+  type       String   @default("DELAY") // DELAY | BREAKDOWN | ROUTE_CHANGE | TIMING_UPDATE | EMERGENCY
+  title      String
+  message    String
+  delayMin   Int?     // e.g. 15 (minutes)
+  postedBy   String   // Name/Role of driver or transport in-charge
+  active     Boolean  @default(true)
+  expiresAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([schoolId, routeId])
+  @@index([schoolId, createdAt])
 }
 
 model Certificate {

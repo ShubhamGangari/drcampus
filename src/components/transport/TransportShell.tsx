@@ -8,6 +8,7 @@ import {
     Map,
     Ticket,
     ShieldAlert,
+    Megaphone,
 } from "lucide-react";
 import { useUniversity } from "@/context/UniversityContext";
 import { canAccessTransport } from "@/lib/transport";
@@ -16,6 +17,7 @@ const NAV_ITEMS = [
     { href: "/transport/routes", label: "Routes", icon: Map },
     { href: "/transport/vehicles", label: "Vehicles", icon: Bus },
     { href: "/transport/passes", label: "Bus Passes", icon: Ticket },
+    { href: "/transport/broadcasts", label: "Route Broadcasts", icon: Megaphone },
 ];
 
 /**

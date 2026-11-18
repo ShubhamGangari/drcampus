@@ -59,7 +59,8 @@ export async function buildAttendanceRows(
   for (const r of records) {
     const g = agg.get(r.studentId) ?? { present: 0, total: 0 };
     g.total++;
-    if (r.status === 'PRESENT') g.present++;
+    // UGC/AICTE standard: DUTY_LEAVE (OD/On-Duty representation) and LATE count towards presence credit
+    if (r.status === 'PRESENT' || r.status === 'DUTY_LEAVE' || r.status === 'LATE') g.present++;
     agg.set(r.studentId, g);
   }
 

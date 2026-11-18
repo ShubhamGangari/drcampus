@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Save, UserCheck, UserX } from "lucide-react";
+import { Save, UserCheck, UserX, Clock, Award, HeartPulse, Sparkles, CheckCheck } from "lucide-react";
 import { PageTitle } from "@/components/attendance/AttendanceShell";
 import { Toast } from "@/components/admissions/Toast";
 import { EmptyState, ErrorState, InlineLoader, Spinner } from "@/components/admissions/States";
@@ -111,6 +111,22 @@ export default function AttendanceMarkPage() {
     },
     []
   );
+
+  const markAll = useCallback(
+    (status: AttendanceStatus) => {
+      const next: Record<string, AttendanceStatus> = {};
+      for (const s of roster) {
+        next[s.id] = status;
+      }
+      setStatuses(next);
+    },
+    [roster]
+  );
+
+  const presentCount = roster.filter((s) => (statuses[s.id] ?? "PRESENT") === "PRESENT").length;
+  const absentCount = roster.filter((s) => statuses[s.id] === "ABSENT").length;
+  const lateCount = roster.filter((s) => statuses[s.id] === "LATE").length;
+  const dutyCount = roster.filter((s) => statuses[s.id] === "DUTY_LEAVE" || statuses[s.id] === "MEDICAL_LEAVE").length;
 
   const canSave = isFaculty && !!courseId && !!date && roster.length > 0 && !saving;
 
@@ -224,12 +240,43 @@ export default function AttendanceMarkPage() {
       )}
 
       <div className="mt-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-black text-slate-900">Students</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-black text-slate-900">Students Roster</h2>
+            {roster.length > 0 && (
+              <div className="flex items-center gap-2 text-[11px] font-bold">
+                <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {presentCount} Present
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                  {absentCount} Absent
+                </span>
+                {(lateCount > 0 || dutyCount > 0) && (
+                  <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    {lateCount + dutyCount} OD/Late
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
           {roster.length > 0 && (
-            <span className="text-[11px] font-semibold text-slate-500">
-              {roster.length} enrolled
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => markAll("PRESENT")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-colors cursor-pointer"
+              >
+                <CheckCheck className="h-3.5 w-3.5 text-emerald-600" /> Mark All Present
+              </button>
+              <button
+                type="button"
+                onClick={() => markAll("ABSENT")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-bold transition-colors cursor-pointer"
+              >
+                <UserX className="h-3.5 w-3.5 text-rose-600" /> Mark All Absent
+              </button>
+            </div>
           )}
         </div>
 
@@ -272,30 +319,69 @@ export default function AttendanceMarkPage() {
                             {s.firstName} {s.lastName}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
                               <button
                                 type="button"
                                 onClick={() => toggleStatus(s.id, "PRESENT")}
                                 aria-pressed={status === "PRESENT"}
-                                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
+                                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-bold transition-colors cursor-pointer ${
                                   status === "PRESENT"
-                                    ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                                    ? "bg-emerald-50 border-emerald-300 text-emerald-700 shadow-2xs"
                                     : "border-slate-200 text-slate-400 hover:bg-slate-50"
                                 }`}
                               >
-                                <UserCheck className="h-3.5 w-3.5" /> Present
+                                <UserCheck className="h-3 w-3" /> Present
                               </button>
                               <button
                                 type="button"
                                 onClick={() => toggleStatus(s.id, "ABSENT")}
                                 aria-pressed={status === "ABSENT"}
-                                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
+                                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-bold transition-colors cursor-pointer ${
                                   status === "ABSENT"
-                                    ? "bg-rose-50 border-rose-300 text-rose-700"
+                                    ? "bg-rose-50 border-rose-300 text-rose-700 shadow-2xs"
                                     : "border-slate-200 text-slate-400 hover:bg-slate-50"
                                 }`}
                               >
-                                <UserX className="h-3.5 w-3.5" /> Absent
+                                <UserX className="h-3 w-3" /> Absent
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleStatus(s.id, "LATE")}
+                                aria-pressed={status === "LATE"}
+                                title="Late arrival within grace period"
+                                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-bold transition-colors cursor-pointer ${
+                                  status === "LATE"
+                                    ? "bg-amber-50 border-amber-300 text-amber-700 shadow-2xs"
+                                    : "border-slate-200 text-slate-400 hover:bg-slate-50"
+                                }`}
+                              >
+                                <Clock className="h-3 w-3" /> Late
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleStatus(s.id, "DUTY_LEAVE")}
+                                aria-pressed={status === "DUTY_LEAVE"}
+                                title="On-Duty (representing university in Sports, Cultural, or Academics; counts towards 75% rule)"
+                                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-bold transition-colors cursor-pointer ${
+                                  status === "DUTY_LEAVE"
+                                    ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs"
+                                    : "border-slate-200 text-slate-400 hover:bg-slate-50"
+                                }`}
+                              >
+                                <Award className="h-3 w-3" /> OD
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleStatus(s.id, "MEDICAL_LEAVE")}
+                                aria-pressed={status === "MEDICAL_LEAVE"}
+                                title="Medical Leave (with verified medical certificate)"
+                                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-bold transition-colors cursor-pointer ${
+                                  status === "MEDICAL_LEAVE"
+                                    ? "bg-blue-50 border-blue-300 text-blue-700 shadow-2xs"
+                                    : "border-slate-200 text-slate-400 hover:bg-slate-50"
+                                }`}
+                              >
+                                <HeartPulse className="h-3 w-3" /> Medical
                               </button>
                             </div>
                           </td>

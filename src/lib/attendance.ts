@@ -18,7 +18,12 @@ import { downloadCsv, toCsv } from "@/lib/obe";
 
 // ---- Types (shapes the backend returns) --------------------------------------
 
-export type AttendanceStatus = "PRESENT" | "ABSENT";
+export type AttendanceStatus =
+  | "PRESENT"
+  | "ABSENT"
+  | "LATE"
+  | "DUTY_LEAVE"
+  | "MEDICAL_LEAVE";
 
 /**
  * Row shape returned by both `GET /api/attendance/report` and

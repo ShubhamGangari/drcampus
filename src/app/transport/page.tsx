@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bus, Map, Ticket, Search, Forward } from "lucide-react";
+import Link from "next/link";
+import { Bus, Map, Ticket, Search, Forward, Megaphone, ArrowRight, AlertTriangle } from "lucide-react";
 import { PageTitle } from "@/components/transport/TransportShell";
 import { ErrorState, LoadingSkeleton } from "@/components/admissions/States";
 import { useUniversity } from "@/context/UniversityContext";
@@ -10,6 +11,8 @@ import {
     fetchPasses,
     fetchRoutes,
     fetchVehicles,
+    fetchBroadcasts,
+    TransportBroadcast,
 } from "@/lib/transport";
 
 function SummaryCard({
@@ -50,6 +53,7 @@ export default function TransportDashboardPage() {
     const [routes, setRoutes] = useState<Awaited<ReturnType<typeof fetchRoutes>>["routes"]>([]);
     const [vehicles, setVehicles] = useState<Awaited<ReturnType<typeof fetchVehicles>>["vehicles"]>([]);
     const [passes, setPasses] = useState<Awaited<ReturnType<typeof fetchPasses>>["passes"]>([]);
+    const [broadcasts, setBroadcasts] = useState<TransportBroadcast[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -58,14 +62,16 @@ export default function TransportDashboardPage() {
         setLoadError(null);
         try {
             const scoped = isCentral && schoolId ? schoolId : undefined;
-            const [r, v, p] = await Promise.all([
+            const [r, v, p, b] = await Promise.all([
                 fetchRoutes({ schoolId: scoped }),
                 fetchVehicles({ schoolId: scoped }),
                 fetchPasses({ schoolId: scoped }),
+                fetchBroadcasts({ schoolId: scoped, activeOnly: true }),
             ]);
             setRoutes(r.routes);
             setVehicles(v.vehicles);
             setPasses(p.passes);
+            setBroadcasts(b.broadcasts);
         } catch (e) {
             setLoadError(e instanceof TransportApiError ? e.message : "Unable to load transport summary.");
         } finally {
@@ -106,11 +112,44 @@ export default function TransportDashboardPage() {
                 <ErrorState message={loadError} onRetry={load} />
             ) : (
                 <div className="space-y-6">
+                    {/* Live Bus Alert Ticker Banner */}
+                    {broadcasts.length > 0 && (
+                        <div className="rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 p-0.5 shadow-md">
+                            <div className="rounded-[14px] bg-white p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-9 w-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
+                                        <AlertTriangle className="h-5 w-5 animate-bounce" />
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-black text-rose-600 uppercase tracking-wider">
+                                                Active Bus Notice ({broadcasts.length})
+                                            </span>
+                                            <span className="text-[11px] font-semibold text-slate-500">
+                                                • {broadcasts[0].routeName}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs font-bold text-slate-900 mt-0.5">
+                                            {broadcasts[0].title}
+                                            {broadcasts[0].delayMin ? ` (+${broadcasts[0].delayMin}m delay)` : ""}
+                                        </p>
+                                    </div>
+                                </div>
+                                <Link
+                                    href="/transport/broadcasts"
+                                    className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-xl transition-colors shrink-0 self-start sm:self-auto"
+                                >
+                                    View All Notices <ArrowRight className="h-3.5 w-3.5" />
+                                </Link>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <SummaryCard icon={Map} label="Routes" value={routes.length} tone="indigo" />
                         <SummaryCard icon={Bus} label="Active vehicles" value={activeVehicles} tone="emerald" />
                         <SummaryCard icon={Ticket} label="Active passes" value={activePasses} tone="amber" />
-                        <SummaryCard icon={Forward} label="Pending pass fees" value={`₹${outstandingFee}`} tone="rose" />
+                        <SummaryCard icon={Megaphone} label="Active notices" value={broadcasts.length} tone="rose" />
                     </div>
 
                     {routes.length === 0 && (

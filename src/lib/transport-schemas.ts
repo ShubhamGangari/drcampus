@@ -10,6 +10,18 @@ import { z } from 'zod';
 export const VEHICLE_TYPES = ['BUS', 'VAN'] as const;
 export const VEHICLE_STATUSES = ['ACTIVE', 'MAINTENANCE'] as const;
 export const PASS_STATUSES = ['ACTIVE', 'EXPIRED', 'PENDING'] as const;
+export const BROADCAST_TYPES = ['DELAY', 'BREAKDOWN', 'ROUTE_CHANGE', 'TIMING_UPDATE', 'EMERGENCY'] as const;
+
+export const createBroadcastSchema = z.object({
+    schoolId: z.string().optional(),
+    routeId: z.string().optional().nullable(),
+    vehicleNo: z.string().max(40).optional().nullable(),
+    type: z.enum(BROADCAST_TYPES).default('DELAY'),
+    title: z.string().min(1, 'Title is required').max(200),
+    message: z.string().min(1, 'Message is required').max(1000),
+    delayMin: z.number().int().min(0).max(300).optional().nullable(),
+    postedBy: z.string().max(100).optional(),
+});
 
 // ---- Route stops (ordered list of named stops) -------------------------------
 

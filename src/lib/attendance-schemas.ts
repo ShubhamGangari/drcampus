@@ -6,7 +6,13 @@
 
 import { z } from 'zod';
 
-export const ATTENDANCE_STATUSES = ['PRESENT', 'ABSENT'] as const;
+export const ATTENDANCE_STATUSES = [
+  'PRESENT',
+  'ABSENT',
+  'LATE',
+  'DUTY_LEAVE',
+  'MEDICAL_LEAVE',
+] as const;
 
 const isoDateSchema = z
   .string()

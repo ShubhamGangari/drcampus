@@ -252,3 +252,74 @@ export function updatePass(id: string, input: UpdatePassInput): Promise<{ pass: 
         body: JSON.stringify(input),
     });
 }
+
+// ---- Broadcasts (WhatsApp Replacement) ---------------------------------------
+
+export type BroadcastType = 'DELAY' | 'BREAKDOWN' | 'ROUTE_CHANGE' | 'TIMING_UPDATE' | 'EMERGENCY';
+
+export interface TransportBroadcast {
+    id: string;
+    schoolId: string;
+    routeId: string | null;
+    routeName: string;
+    vehicleNo: string | null;
+    type: BroadcastType;
+    title: string;
+    message: string;
+    delayMin: number | null;
+    postedBy: string;
+    active: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CreateBroadcastInput {
+    schoolId?: string;
+    routeId?: string | null;
+    vehicleNo?: string | null;
+    type: BroadcastType;
+    title: string;
+    message: string;
+    delayMin?: number | null;
+    postedBy?: string;
+}
+
+/** `GET /api/transport/broadcasts` */
+export function fetchBroadcasts(
+    filters: { schoolId?: string; routeId?: string; activeOnly?: boolean } = {}
+): Promise<{ broadcasts: TransportBroadcast[] }> {
+    const p = new URLSearchParams();
+    if (filters.schoolId) p.set("schoolId", filters.schoolId);
+    if (filters.routeId) p.set("routeId", filters.routeId);
+    if (filters.activeOnly) p.set("activeOnly", "true");
+    const qs = p.toString();
+    return request(`/api/transport/broadcasts${qs ? `?${qs}` : ""}`);
+}
+
+/** `POST /api/transport/broadcasts` → `201 { broadcast, notifiedCount }` */
+export function createBroadcast(
+    input: CreateBroadcastInput
+): Promise<{ broadcast: TransportBroadcast; notifiedCount: number }> {
+    return request("/api/transport/broadcasts", {
+        method: "POST",
+        body: JSON.stringify(input),
+    });
+}
+
+/** `PATCH /api/transport/broadcasts/[id]` */
+export function updateBroadcast(
+    id: string,
+    updates: { active?: boolean; title?: string; message?: string; delayMin?: number | null }
+): Promise<{ broadcast: TransportBroadcast }> {
+    return request(`/api/transport/broadcasts/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+    });
+}
+
+/** `DELETE /api/transport/broadcasts/[id]` */
+export function deleteBroadcast(id: string): Promise<{ deleted: boolean }> {
+    return request(`/api/transport/broadcasts/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+    });
+}
