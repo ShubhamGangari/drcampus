@@ -23,6 +23,7 @@ import { COURSES } from "@/data/mockData";
 import { Course } from "@/types";
 import { useUniversity } from "@/context/UniversityContext";
 import { fetchExams, fetchSchedules, formatDate, formatTime } from "@/lib/exams";
+import { fetchBroadcasts, TransportBroadcast } from "@/lib/transport";
 
 interface StudentWorkspaceProps {
   activeSchoolId?: string;
@@ -58,6 +59,22 @@ export const StudentWorkspace: React.FC<StudentWorkspaceProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<"UPI" | "NETBANKING" | "CARD">("UPI");
   const [paidReceipt, setPaidReceipt] = useState<{ txnId: string; date: string; amount: number } | null>(null);
   const [condonationToast, setCondonationToast] = useState<string | null>(null);
+  const [broadcasts, setBroadcasts] = useState<TransportBroadcast[]>([]);
+
+  // Fetch active transport route broadcasts for the student
+  React.useEffect(() => {
+    let alive = true;
+    fetchBroadcasts({ activeOnly: true })
+      .then((res) => {
+        if (alive) setBroadcasts(res.broadcasts || []);
+      })
+      .catch(() => {
+        /* best effort */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const condonationAppeal = appeals.find((a) => a.studentId === student.id);
   const thresholdPct = isHimsStudent ? 80.0 : 75.0;
@@ -303,6 +320,38 @@ export const StudentWorkspace: React.FC<StudentWorkspaceProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Attendance Warning / Status */}
           <div className="lg:col-span-2 space-y-6">
+
+            {/* Real-time Bus Route Alerts for Commuter Students */}
+            {broadcasts.length > 0 && (
+              <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-300 rounded-2xl p-4 flex items-start gap-3.5 shadow-2xs">
+                <div className="h-10 w-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Bus className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                      Live Bus Route Advisory
+                    </span>
+                    <span className="text-xs text-slate-500 font-medium">Auto-Broadcast</span>
+                  </div>
+                  <h4 className="text-xs font-bold text-slate-900 mt-1">{broadcasts[0].title}</h4>
+                  <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{broadcasts[0].message}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                    {broadcasts[0].delayMin ? (
+                      <span className="font-bold text-amber-800 bg-amber-100/90 px-2.5 py-0.5 rounded-md">
+                        ⏱️ Delay: +{broadcasts[0].delayMin} Mins
+                      </span>
+                    ) : null}
+                    {broadcasts[0].vehicleNo && (
+                      <span className="font-medium text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
+                        Bus Reg: {broadcasts[0].vehicleNo}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {!isAttendanceEligible ? (
               <div className="bg-rose-50 border border-rose-200 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-start gap-3">

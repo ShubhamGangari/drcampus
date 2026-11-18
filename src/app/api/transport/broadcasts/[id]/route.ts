@@ -90,3 +90,4 @@ export const DELETE = withAuth(async (request, { user, params }) => {
         return errorResponse(error);
     }
 });
+

@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Ticket } from "lucide-react";
+import { Plus, Ticket, Printer, Eye } from "lucide-react";
 import { PageTitle } from "@/components/exams/ExamsShell";
 import { ExamPicker } from "@/components/exams/ExamPicker";
 import { GenerateHallTicketModal } from "@/components/exams/GenerateHallTicketModal";
+import { HallTicketCardModal } from "@/components/exams/HallTicketCardModal";
 import { Toast } from "@/components/admissions/Toast";
 import { EmptyState, ErrorState, LoadingSkeleton } from "@/components/admissions/States";
 import { useUniversity } from "@/context/UniversityContext";
@@ -33,6 +34,7 @@ export default function HallTicketsPage() {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<{ ticket: HallTicket; student: StudentSummary | null } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const load = useCallback(async () => {
@@ -138,6 +140,7 @@ export default function HallTicketsPage() {
                   <th className="px-4 py-3 font-bold">Hall Ticket No</th>
                   <th className="px-4 py-3 font-bold">Exam</th>
                   <th className="px-4 py-3 font-bold">Issued</th>
+                  <th className="px-4 py-3 font-bold text-right">E-Admit Card</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -157,6 +160,16 @@ export default function HallTicketsPage() {
                       </td>
                       <td className="px-4 py-3.5 text-slate-600">{exam?.title ?? "—"}</td>
                       <td className="px-4 py-3.5 text-slate-600">{formatDate(t.createdAt)}</td>
+                      <td className="px-4 py-3.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTicket({ ticket: t, student: student ?? null })}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 text-slate-700 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                        >
+                          <Eye className="h-3.5 w-3.5 text-indigo-500" />
+                          <span>View &amp; Print</span>
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -165,6 +178,14 @@ export default function HallTicketsPage() {
           </div>
         </div>
       )}
+
+      <HallTicketCardModal
+        open={Boolean(selectedTicket)}
+        ticket={selectedTicket?.ticket ?? null}
+        exam={exam}
+        student={selectedTicket?.student ?? null}
+        onClose={() => setSelectedTicket(null)}
+      />
 
       <GenerateHallTicketModal
         open={generateOpen}
